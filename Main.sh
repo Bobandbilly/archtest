@@ -72,24 +72,38 @@ install_de() {
 boot() {
     if [ -d /sys/firmware/efi/efivars ]; then
         echo "Detected UEFI system."
-        pacman -S --noconfirm grub efibootmgr
-        read -p "Is the EFI system partition already mounted? (yes/no): " is_mounted
-        if [ "$is_mounted" = "no" ]; then
-            read -p "Enter the EFI system partition (e.g., /dev/sda1): " efi_partition
-            read -p "Enter the mount point (e.g., /boot/efi): " mount_point
-            mount "$efi_partition" "$mount_point"
-        else
-            read -p "Enter the existing mount point (e.g., /boot/efi): " mount_point
-        fi
-        grub-install --target=x86_64-efi --efi-directory="$mount_point" --bootloader-id=GRUB
+        pacman -S --noconfirm systemd-boot
+
+        # Ask for the EFI system partition and mount point
+        read -p "Enter the EFI system partition (e.g., /dev/sda1): " efi_partition
+        read -p "Enter the mount point (e.g., /boot/efi): " mount_point
+
+        # Mount the EFI system partition
+        mount "$efi_partition" "$mount_point"
+
+        # Install systemd-boot to the specified path
+        echo "Installing systemd-boot..."
+        bootctl --path="$mount_point" install
+
+        # Create a bootloader entry
+        echo "Creating systemd-boot entry..."
+        mkdir -p "$mount_point/loader/entries"
+        cat > "$mount_point/loader/entries/arch.conf" <<EOF
+title   Arch Linux
+linux   /vmlinuz-linux
+initrd  /initramfs-linux.img
+options root=UUID=$(blkid -s UUID -o value "$ROOT_PARTITION") rw
+EOF
+        echo "systemd-boot installation and configuration completed."
+
     else
         echo "Detected BIOS system."
         pacman -S --noconfirm grub
         read -p "Enter the disk where GRUB should be installed (e.g., /dev/sda): " disk
         grub-install --target=i386-pc "$disk"
+        grub-mkconfig -o /boot/grub/grub.cfg
+        echo "GRUB installation completed successfully."
     fi
-    grub-mkconfig -o /boot/grub/grub.cfg
-    echo "GRUB installation completed successfully."
 }
 
 # User Setup
